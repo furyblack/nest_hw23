@@ -1,5 +1,4 @@
-import { CommentRepository } from '../infrastructure/comment-repository';
-import { CommentOutputType, CreateCommentDto } from '../dto/create-comment-dto';
+import { CommentViewDto, CreateCommentDto } from '../dto/create-comment-dto';
 import {
   ForbiddenException,
   Injectable,
@@ -9,11 +8,12 @@ import { PostsService } from '../../posts/application/posts.service';
 import { GetCommentsQueryDto } from '../dto/getCommentsDto';
 import { Pagination } from '../../posts/dto/pagination.dto';
 import { LikeStatusEnum } from '../../posts/dto/like-status.dto';
+import { CommentsRepository } from '../infrastructure/comment-repository';
 
 @Injectable()
 export class CommentService {
   constructor(
-    private readonly commentsRepository: CommentRepository,
+    private readonly commentsRepo: CommentsRepository,
     private readonly postsService: PostsService,
   ) {}
 
@@ -22,43 +22,24 @@ export class CommentService {
     userId: string,
     userLogin: string,
     dto: CreateCommentDto,
-  ): Promise<CommentOutputType> {
-    try {
-      const post = await this.postsService.getPostById(postId);
-      if (!post) throw new NotFoundException('Post not found');
+  ): Promise<CommentViewDto> {
+    // 1) Проверяем, что пост существует
+    const post = await this.postsService.getPostById(postId);
+    if (!post) throw new NotFoundException('Post not found');
 
-      const comment = await this.commentsRepository.create({
-        content: dto.content,
-        postId,
-        userId,
-        userLogin,
-      });
-
-      return {
-        id: comment.id,
-        content: comment.content,
-        commentatorInfo: {
-          userId,
-          userLogin,
-        },
-        createdAt: comment.created_at.toISOString(),
-        likesInfo: {
-          likesCount: 0,
-          dislikesCount: 0,
-          myStatus: 'None',
-        },
-      };
-    } catch (err) {
-      console.error('🔥 Ошибка при создании комментария:', err);
-      throw err;
-    }
+    // 2) Вызываем new-репозиторий createComment
+    return this.commentsRepo.createComment(
+      postId,
+      { id: userId, login: userLogin },
+      dto,
+    );
   }
 
   async getCommentById(
     commentId: string,
     currentUserId?: string,
-  ): Promise<CommentOutputType> {
-    const comment = await this.commentsRepository.findById(
+  ): Promise<CommentViewDto> {
+    const comment = await this.commentsRepo.findCommentById(
       commentId,
       currentUserId,
     );
@@ -71,44 +52,44 @@ export class CommentService {
     content: string,
     userId: string,
   ): Promise<void> {
-    const comment = await this.commentsRepository.findById(commentId);
-    if (!comment) {
-      throw new NotFoundException('Comment not found');
-    }
+    // 1) Проверяем, что комментарий существует и получаем DTO
+    const comment = await this.commentsRepo.findCommentById(commentId);
+    if (!comment) throw new NotFoundException('Comment not found');
 
+    // 2) Проверяем право
     if (comment.commentatorInfo.userId !== userId) {
       throw new ForbiddenException('You are not the owner of this comment');
     }
 
-    await this.commentsRepository.updateContent(commentId, content);
+    // 3) Обновляем контент
+    await this.commentsRepo.updateContent(commentId, content);
   }
 
   async getCommentsForPost(
     postId: string,
     query: GetCommentsQueryDto,
     currentUserId: string,
-  ): Promise<Pagination<CommentOutputType>> {
+  ): Promise<Pagination<CommentViewDto>> {
+    // 1) Проверяем, что пост есть
     const post = await this.postsService.getPostById(postId);
     if (!post) throw new NotFoundException('Post not found');
 
-    return this.commentsRepository.getCommentsForPost(
-      postId,
-      query,
-      currentUserId,
-    );
+    // 2) Получаем пагинированный список
+    return this.commentsRepo.getCommentsForPost(postId, query, currentUserId);
   }
 
   async deleteComment(commentId: string, userId: string): Promise<void> {
-    const comment = await this.commentsRepository.findById(commentId);
-    if (!comment) {
-      throw new NotFoundException('Comment not found');
-    }
+    // 1) Проверяем существование
+    const comment = await this.commentsRepo.findCommentById(commentId);
+    if (!comment) throw new NotFoundException('Comment not found');
 
+    // 2) Проверяем право
     if (comment.commentatorInfo.userId !== userId) {
       throw new ForbiddenException('You are not the owner of this comment');
     }
 
-    await this.commentsRepository.delete(commentId);
+    // 3) Удаляем (soft-delete)
+    await this.commentsRepo.deleteComment(commentId);
   }
 
   async likeComment(
@@ -117,15 +98,14 @@ export class CommentService {
     userLogin: string,
     likeStatus: LikeStatusEnum,
   ): Promise<void> {
-    const comment = await this.commentsRepository.findById(commentId);
-    if (!comment) {
-      throw new NotFoundException('Comment not found');
-    }
+    // 1) Убедиться, что комментарий существует
+    const comment = await this.commentsRepo.findCommentById(commentId);
+    if (!comment) throw new NotFoundException('Comment not found');
 
-    await this.commentsRepository.updateLikeForComment(
+    // 2) Обновить лайк-статус
+    await this.commentsRepo.updateLikeStatus(
       commentId,
-      userId,
-      userLogin,
+      { id: userId, login: userLogin },
       likeStatus,
     );
   }

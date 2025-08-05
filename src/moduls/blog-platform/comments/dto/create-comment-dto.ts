@@ -5,23 +5,23 @@ export class CreateCommentDto {
   @Length(20, 300)
   content: string;
 }
-export class CommentatorInfo {
+export class CommentatorInfoDto {
   userId: string;
   userLogin: string;
 }
 
-export class LikesInfo {
+export class LikesInfoDto {
   likesCount: number;
   dislikesCount: number;
   myStatus: 'None' | 'Like' | 'Dislike';
 }
 
-export class CommentOutputType {
+export class CommentViewDto {
   id: string;
   content: string;
-  commentatorInfo: CommentatorInfo;
+  commentatorInfo: CommentatorInfoDto;
   createdAt: string; // ISO string
-  likesInfo: LikesInfo;
+  likesInfo: LikesInfoDto;
 }
 
 export class UpdateCommentDto {

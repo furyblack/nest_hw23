@@ -1,235 +1,159 @@
-import { DataSource } from 'typeorm';
-import { Injectable } from '@nestjs/common';
-import { GetCommentsQueryDto } from '../dto/getCommentsDto';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { CommentViewDto, CreateCommentDto } from '../dto/create-comment-dto';
+import { Post } from '../../posts/domain/post.entity';
+import { Comment } from '../domain/comment.entity';
+import { GetCommentsQueryDto } from '../dto/get-comments-query.dto';
 import { LikeStatusEnum } from '../../posts/dto/like-status.dto';
-import { LikeStatus } from '../../posts/likes/like.enum';
+import { LikeStatus } from '../../posts/dto/like-types';
 
 @Injectable()
-export class CommentRepository {
-  constructor(private readonly dataSource: DataSource) {}
+export class CommentsRepository {
+  constructor(
+    @InjectRepository(Comment)
+    private readonly repo: Repository<Comment>,
+    private readonly dataSource: DataSource,
+  ) {}
 
-  async create(data: {
-    content: string;
-    postId: string;
-    userId: string;
-    userLogin: string;
-  }) {
-    const result = await this.dataSource.query(
-      `
-    INSERT INTO comments (id, content, post_id, user_id, user_login)
-    VALUES (gen_random_uuid(), $1, $2, $3, $4)
-    RETURNING *
-    `,
-      [data.content, data.postId, data.userId, data.userLogin],
-    );
+  async createComment(
+    postId: string,
+    user: { id: string; login: string },
+    dto: CreateCommentDto,
+  ): Promise<CommentViewDto> {
+    const post = await this.dataSource
+      .getRepository(Post)
+      .findOneBy({ id: postId });
+    if (!post) throw new NotFoundException('Post not found');
 
-    return result[0];
+    const comment = this.repo.create({
+      content: dto.content,
+      post,
+      user,
+      userLogin: user.login,
+    });
+    const saved = await this.repo.save(comment);
+    return this.mapToDto(saved, user.id);
   }
 
-  async findById(commentId: string, currentUserId?: string) {
-    const result = await this.dataSource.query(
-      `
-    SELECT * FROM comments
-    WHERE id = $1 AND deletion_status = 'active'
-    `,
-      [commentId],
-    );
-
-    const comment = result[0];
+  async findCommentById(
+    commentId: string,
+    currentUserId?: string,
+  ): Promise<CommentViewDto | null> {
+    const comment = await this.repo.findOne({
+      where: { id: commentId },
+      relations: ['user', 'post'],
+    });
     if (!comment) return null;
+    return this.mapToDto(comment, currentUserId);
+  }
 
-    // 1. Подсчитать лайки и дизлайки
-    const [likesCountResult, dislikesCountResult] = await Promise.all([
-      this.dataSource.query(
-        `SELECT COUNT(*) FROM likes WHERE entity_id = $1 AND entity_type = 'Comment' AND status = 'Like'`,
-        [commentId],
-      ),
-      this.dataSource.query(
-        `SELECT COUNT(*) FROM likes WHERE entity_id = $1 AND entity_type = 'Comment' AND status = 'Dislike'`,
-        [commentId],
-      ),
-    ]);
+  async getCommentsForPost(
+    postId: string,
+    query: GetCommentsQueryDto,
+    currentUserId?: string,
+  ) {
+    // убедимся, что пост существует
+    const exists = await this.dataSource
+      .getRepository(Post)
+      .exist({ where: { id: postId } });
+    if (!exists) throw new NotFoundException('Post not found');
 
-    const likesCount = parseInt(likesCountResult[0].count, 10);
-    const dislikesCount = parseInt(dislikesCountResult[0].count, 10);
+    const page = query.pageNumber ?? 1;
+    const pageSize = query.pageSize ?? 10;
+    const skip = (page - 1) * pageSize;
+    const sortBy = ['content', 'createdAt'].includes(query.sortBy)
+      ? query.sortBy
+      : 'createdAt';
+    const sortDir =
+      query.sortDirection?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-    // 2. Получить статус текущего пользователя
-    let myStatus = LikeStatus.None;
+    const qb = this.repo
+      .createQueryBuilder('c')
+      .leftJoinAndSelect('c.user', 'u')
+      .where('c.post_id = :postId', { postId })
+      .orderBy(`c.${sortBy}`, sortDir)
+      .skip(skip)
+      .take(pageSize);
+
+    const [items, totalCount] = await qb.getManyAndCount();
+    const pagesCount = Math.ceil(totalCount / pageSize);
+    const dtos = items.map((c) => this.mapToDto(c, currentUserId));
+    return { pagesCount, page, pageSize, totalCount, items: dtos };
+  }
+
+  async updateContent(commentId: string, content: string): Promise<void> {
+    const res = await this.repo.update(commentId, { content });
+    if (res.affected === 0) throw new NotFoundException('Comment not found');
+  }
+
+  async deleteComment(commentId: string): Promise<void> {
+    const res = await this.repo.delete(commentId);
+    if (res.affected === 0) throw new NotFoundException('Comment not found');
+  }
+
+  async updateLikeStatus(
+    commentId: string,
+    user: { id: string; login: string },
+    status: LikeStatusEnum,
+  ): Promise<void> {
+    const likeRepo = this.dataSource.getRepository('likes');
+    const norm: LikeStatus =
+      status === LikeStatusEnum.Like
+        ? LikeStatus.Like
+        : status === LikeStatusEnum.Dislike
+          ? LikeStatus.Dislike
+          : LikeStatus.None;
+
+    const existing = await likeRepo.findOneBy({
+      user_id: user.id,
+      entity_id: commentId,
+      entity_type: 'Comment',
+    });
+
+    if (norm === LikeStatus.None) {
+      if (existing) await likeRepo.delete(existing);
+      return;
+    }
+
+    if (existing) {
+      await likeRepo.update(existing, { status: norm });
+    } else {
+      await likeRepo.insert({
+        id: undefined,
+        user_id: user.id,
+        user_login: user.login,
+        entity_id: commentId,
+        entity_type: 'Comment',
+        status: norm,
+        created_at: new Date(),
+      });
+    }
+  }
+
+  private mapToDto(comment: Comment, currentUserId?: string): CommentViewDto {
+    const likes = (comment as any).likesCount ?? 0;
+    const dislikes = (comment as any).dislikesCount ?? 0;
+    let myStatus: LikeStatus = LikeStatus.None;
+
     if (currentUserId) {
-      const statusResult = await this.dataSource.query(
-        `SELECT status FROM likes WHERE user_id = $1 AND entity_id = $2 AND entity_type = 'Comment'`,
-        [currentUserId, commentId],
-      );
-      if (statusResult[0]) {
-        myStatus = statusResult[0].status;
-      }
+      // если в Comment есть поле myStatus, он уже джойнится
+      myStatus = (comment as any).myStatus ?? LikeStatus.None;
     }
 
     return {
       id: comment.id,
       content: comment.content,
       commentatorInfo: {
-        userId: comment.user_id,
-        userLogin: comment.user_login,
+        userId: comment.user.id,
+        userLogin: comment.userLogin,
       },
-      createdAt: comment.created_at.toISOString(),
+      createdAt: comment.createdAt.toISOString(),
       likesInfo: {
-        likesCount,
-        dislikesCount,
+        likesCount: likes,
+        dislikesCount: dislikes,
         myStatus,
       },
     };
-  }
-
-  async findUserReaction(
-    entityId: string,
-    userId: string,
-    entityType: 'Post' | 'Comment',
-  ) {
-    const result = await this.dataSource.query(
-      `SELECT status FROM likes WHERE entity_id = $1 AND user_id = $2 AND entity_type = $3`,
-      [entityId, userId, entityType],
-    );
-    return result[0] || null;
-  }
-
-  async updateContent(commentId: string, content: string) {
-    await this.dataSource.query(
-      `UPDATE comments SET content = $1 WHERE id = $2`,
-      [content, commentId],
-    );
-  }
-  async delete(commentId: string): Promise<void> {
-    await this.dataSource.query(
-      `UPDATE comments SET deletion_status = 'deleted' WHERE id = $1`,
-      [commentId],
-    );
-  }
-
-  async getCommentsForPost(
-    postId: string,
-    query: GetCommentsQueryDto,
-    currentUserId: string,
-  ) {
-    const page = query.pageNumber || 1;
-    const pageSize = query.pageSize || 10;
-    const skip = (page - 1) * pageSize;
-
-    // 🔐 Безопасный маппинг полей для сортировки
-    const sortableFieldsMap: Record<string, string> = {
-      content: 'content',
-      createdAt: 'created_at', // клиент шлёт createdAt, в БД — created_at
-    };
-
-    const sortByRaw = query.sortBy || 'createdAt'; // что пришло от клиента
-    const sortBy = sortableFieldsMap[sortByRaw] || 'created_at'; // что подставим в SQL
-    const sortDirection =
-      query.sortDirection?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-
-    // 🔄 Основной запрос: достаем комментарии с агрегацией лайков/дизлайков
-    const comments = await this.dataSource.query(
-      `
-          SELECT
-              c.id,
-              c.content,
-              c.user_id,
-              c.user_login,
-              c.created_at,
-              COALESCE(SUM(CASE WHEN l.status = 'Like' THEN 1 ELSE 0 END), 0) AS likes_count,
-              COALESCE(SUM(CASE WHEN l.status = 'Dislike' THEN 1 ELSE 0 END), 0) AS dislikes_count
-          FROM comments c
-                   LEFT JOIN likes l
-                             ON c.id = l.entity_id AND l.entity_type = 'Comment'
-          WHERE c.post_id = $1 AND c.deletion_status = 'active'
-          GROUP BY c.id
-          ORDER BY ${sortBy} ${sortDirection}
-          LIMIT $2 OFFSET $3
-      `,
-      [postId, pageSize, skip],
-    );
-
-    const countResult = await this.dataSource.query(
-      `SELECT COUNT(*) FROM comments WHERE post_id = $1 AND deletion_status = 'active'`,
-      [postId],
-    );
-
-    const totalCount = parseInt(countResult[0].count, 10);
-    const pagesCount = Math.ceil(totalCount / pageSize);
-
-    // 👇 Обработка лайков
-    const items = await Promise.all(
-      comments.map(async (c: any) => {
-        let myStatus = 'None';
-
-        if (currentUserId) {
-          const like = await this.dataSource.query(
-            `
-          SELECT status FROM likes
-          WHERE user_id = $1 AND entity_id = $2 AND entity_type = 'Comment'
-          `,
-            [currentUserId, c.id],
-          );
-          myStatus = like[0]?.status || 'None';
-        }
-
-        return {
-          id: c.id,
-          content: c.content,
-          commentatorInfo: {
-            userId: c.user_id,
-            userLogin: c.user_login,
-          },
-          createdAt: c.created_at,
-          likesInfo: {
-            likesCount: Number(c.likes_count || 0),
-            dislikesCount: Number(c.dislikes_count || 0),
-            myStatus,
-          },
-        };
-      }),
-    );
-
-    return {
-      pagesCount,
-      page,
-      pageSize,
-      totalCount,
-      items,
-    };
-  }
-
-  async updateLikeForComment(
-    commentId: string,
-    userId: string,
-    userLogin: string,
-    status: LikeStatusEnum,
-  ): Promise<void> {
-    const normalizedStatus =
-      status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
-
-    if (normalizedStatus === 'None') {
-      await this.dataSource.query(
-        `DELETE FROM likes WHERE user_id = $1 AND entity_id = $2 AND entity_type = 'Comment'`,
-        [userId, commentId],
-      );
-      return;
-    }
-
-    const existing = await this.dataSource.query(
-      `SELECT * FROM likes WHERE user_id = $1 AND entity_id = $2 AND entity_type = 'Comment'`,
-      [userId, commentId],
-    );
-
-    if (existing.length > 0) {
-      await this.dataSource.query(
-        `UPDATE likes SET status = $1 WHERE user_id = $2 AND entity_id = $3 AND entity_type = 'Comment'`,
-        [normalizedStatus, userId, commentId],
-      );
-    } else {
-      await this.dataSource.query(
-        `INSERT INTO likes (user_id, user_login, entity_id, entity_type, status) VALUES ($1, $2, $3, $4,$5)`,
-        [userId, userLogin, commentId, 'Comment', normalizedStatus],
-      );
-    }
   }
 }

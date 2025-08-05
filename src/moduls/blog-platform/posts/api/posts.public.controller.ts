@@ -15,7 +15,7 @@ import { PostsService } from '../application/posts.service';
 import { GetPostsQueryDto } from '../dto/get-posts-query.dto';
 import { PostViewDto } from '../dto/posts-view.dto';
 import {
-  CommentOutputType,
+  CommentViewDto,
   CreateCommentDto,
 } from '../../comments/dto/create-comment-dto';
 import { CommentService } from '../../comments/application/comment-service';
@@ -60,7 +60,7 @@ export class PostsPublicController {
     @Body() dto: CreateCommentDto,
     @CurrentUser('userId') userId: string,
     @CurrentUser('login') userLogin: string,
-  ): Promise<CommentOutputType> {
+  ): Promise<CommentViewDto> {
     return this.commentsService.createComment(postId, userId, userLogin, dto);
   }
   @Get(':postId/comments')

@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../../../user-accounts/decarators/current-user';
-import { CommentOutputType, UpdateCommentDto } from '../dto/create-comment-dto';
+import { CommentViewDto, UpdateCommentDto } from '../dto/create-comment-dto';
 import { CommentService } from '../application/comment-service';
 import { JwtAuthGuard } from '../../../user-accounts/guards/bearer/jwt-auth.guard';
 import { LikeStatusDto } from '../../posts/dto/like-status.dto';
@@ -24,7 +24,7 @@ export class CommentController {
   async getCommentById(
     @Param('id') id: string,
     @CurrentUser('userId') userId?: string,
-  ): Promise<CommentOutputType> {
+  ): Promise<CommentViewDto> {
     return this.commentsService.getCommentById(id, userId);
   }
 

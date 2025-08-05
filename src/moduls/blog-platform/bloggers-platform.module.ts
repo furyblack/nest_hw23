@@ -7,7 +7,6 @@ import { BlogsQueryRepository } from './blogs/infrastructure/query/blogs.query-r
 import { PostsService } from './posts/application/posts.service';
 import { PostsRepository } from './posts/infrastructure/posts.repository';
 import { PostsPublicController } from './posts/api/posts.public.controller';
-import { CommentRepository } from './comments/infrastructure/comment-repository';
 import { CommentService } from './comments/application/comment-service';
 import { CommentController } from './comments/api/comment-controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -15,6 +14,7 @@ import { Blog } from './blogs/domain/blog.entity';
 import { Post } from './posts/domain/post.entity';
 import { Comment } from './comments/domain/comment.entity';
 import { Likes } from './posts/domain/likes.entity';
+import { CommentsRepository } from './comments/infrastructure/comment-repository';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Blog, Post, Comment, Likes])],
@@ -30,7 +30,7 @@ import { Likes } from './posts/domain/likes.entity';
     BlogsQueryRepository,
     PostsService,
     PostsRepository,
-    CommentRepository,
+    CommentsRepository,
     CommentService,
   ],
   exports: [],
