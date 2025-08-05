@@ -19,7 +19,7 @@ import { BloggersPlatformModule } from './moduls/blog-platform/bloggers-platform
       password: '3991',
       database: 'blogger_platform',
       autoLoadEntities: true,
-      synchronize: true,
+      synchronize: false,
       logging: false,
     }),
 

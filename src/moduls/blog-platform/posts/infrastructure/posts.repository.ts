@@ -5,7 +5,7 @@ import { GetPostsQueryDto } from '../dto/get-posts-query.dto';
 import { DeletionStatus, Post } from '../domain/post.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CreatePostDto } from '../dto/create-post.dto';
-import { Blog } from '../../blogs/domain/blog.enity';
+import { Blog } from '../../blogs/domain/blog.entity';
 import { Pagination } from '../dto/pagination.dto';
 import { PostViewDto } from '../dto/posts-view.dto';
 import { UpdatePostDto } from '../dto/update.post.dto';

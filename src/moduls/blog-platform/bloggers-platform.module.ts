@@ -11,10 +11,10 @@ import { CommentRepository } from './comments/infrastructure/comment-repository'
 import { CommentService } from './comments/application/comment-service';
 import { CommentController } from './comments/api/comment-controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Blog } from './blogs/domain/blog.enity';
+import { Blog } from './blogs/domain/blog.entity';
 import { Post } from './posts/domain/post.entity';
 import { Comment } from './comments/domain/comment.entity';
-import { Likes } from './posts/likes/likes.entity';
+import { Likes } from './posts/domain/likes.entity';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Blog, Post, Comment, Likes])],

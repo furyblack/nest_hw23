@@ -3,7 +3,7 @@ import { Repository } from 'typeorm';
 import { CreateBlogDto, UpdateBlogDto } from '../dto/create-blog.dto';
 import { GetBlogsQueryDto } from '../dto/getBlogsQueryDto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Blog } from '../domain/blog.enity';
+import { Blog } from '../domain/blog.entity';
 
 @Injectable()
 export class BlogsRepository {

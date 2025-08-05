@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { BlogsViewDto } from '../../dto/blog-view.dto';
-import { Blog } from '../../domain/blog.enity';
+import { Blog } from '../../domain/blog.entity';
 
 @Injectable()
 export class BlogsQueryRepository {

@@ -6,7 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Blog } from '../../blog-platform/blogs/domain/blog.enity';
+import { Blog } from '../../blog-platform/blogs/domain/blog.entity';
 import { Post } from '../../blog-platform/posts/domain/post.entity';
 import { Comment } from '../../blog-platform/comments/domain/comment.entity';
 import { Session } from './session.entity';
