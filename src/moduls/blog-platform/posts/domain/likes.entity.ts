@@ -2,8 +2,11 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
+import { User } from '../../../user-accounts/domain/user.entity';
 
 @Entity('likes')
 export class Likes {
@@ -27,4 +30,8 @@ export class Likes {
 
   @CreateDateColumn({ type: 'timestamptz', default: () => 'now()' })
   created_at: Date;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'user_id' })
+  user: User;
 }
