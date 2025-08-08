@@ -72,7 +72,7 @@ export class PostsRepository {
 
     const [items, totalCount] = await qb.getManyAndCount();
 
-    // Запрос для лайков текущего пользователя
+    //Запрос для лайков текущего пользвателя
     const userLikeStatuses = userId
       ? await this.getUserLikeStatuses(
           items.map((p) => p.id),
