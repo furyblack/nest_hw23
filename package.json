@@ -19,7 +19,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "add-empty-migration": "typeorm-ts-node-commonjs migration:create src/migrations/empty",
-    "generate-migration": "cross-env NODE_ENV=development typeorm-ts-node-commonjs migration:generate",
+    "generate-migration": "cross-env NODE_ENV=development typeorm-ts-node-commonjs migration:generate -d migration.config.ts  src/migrations/add-manytoone1",
     "apply-migrations": "typeorm-ts-node-commonjs migration:run -d migration.config.ts",
     "revert-migration": "typeorm-ts-node-commonjs migration:revert -d src/migrations/migrations-data-source.ts"
   },
