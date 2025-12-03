@@ -23,7 +23,6 @@ export class BasicAuthGuard implements CanActivate {
     );
     const [username, password] = credentials.split(':');
 
-    // Тут задаёшь свои правильные логин/пароль
     if (username !== 'admin' || password !== 'qwerty') {
       throw new UnauthorizedException('Invalid credentials');
     }
